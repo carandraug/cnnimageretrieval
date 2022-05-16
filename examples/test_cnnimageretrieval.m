@@ -18,7 +18,12 @@ download_train(data_root);
 download_test(data_root); 
 
 % Set test options
-test_datasets = {'oxford5k', 'paris6k', 'roxford5k', 'rparis6k'};  % list of datasets to evaluate on
+test_datasets = {
+  'oxford5k',
+  'paris6k',
+  'roxford5k',
+  'rparis6k'
+};  % list of datasets to evaluate on
 test_imdim = 1024;  % choose test image dimensionality
 use_ms = 1; % use multi-scale representation, otherwise use single-scale
 use_rvec = 0;  % use regional representation (R-MAC, R-GeM), otherwise use global (MAC, GeM)
@@ -41,26 +46,12 @@ network_file = fullfile(data_root, 'networks', 'retrieval-SfM-120k', 'retrievalS
 %---------------------------------------------------------------------
 
 % Choose training data for whitening and set up data folder
-% train_whiten_file = fullfile(data_root, 'train', 'dbs', 'retrieval-SfM-30k-whiten.mat'); % less images, faster
-train_whiten_file = fullfile(data_root, 'train', 'dbs', 'retrieval-SfM-120k-whiten.mat'); % more images, better results but slower
+%train_whiten_filename = 'retrieval-SfM-30k-whiten.mat';  % less images, faster
+train_whiten_filename = 'retrieval-SfM-120k-whiten.mat'; % more images, better results but slower
 
 % Set folder where original training images are stored, whitening learned on them
-ims_whiten_dir = fullfile(data_root, 'train', 'ims');
-
-% Prepare function for desc extraction
-if ~use_rvec 
-	if ~use_ms
-		descfun = @(x, y) cnn_vecms (x, y, 1);
-	else
-		descfun = @(x, y) cnn_vecms (x, y, [1, 1/sqrt(2), 1/2]);
-	end  
-else 
-	if ~use_ms
-		descfun = @(x, y) cnn_vecrms (x, y, 3, 1);
-	else
-		descfun = @(x, y) cnn_vecrms (x, y, 3, [1, 1/sqrt(2), 1/2]);
-	end  
-end
+train_whiten_file = fullfile(data_root, 'train', 'dbs', train_whiten_filename);
+learned_whiten_filepath = fullfile(data_root, 'train', 'dbs', ['learned-' train_whiten_filename]);
 
 %---------------------------------------------------------------------
 % Testing
@@ -99,38 +90,61 @@ if numGpus >= 1
 	end
 end
 
-% Load training data filenames and pairs for whitening
-train_whiten = load(train_whiten_file);
-if isfield(train_whiten, 'train') && isfield(train_whiten, 'val')
-	cids  = [train_whiten.train.cids train_whiten.val.cids]; 
-	qidxs = [train_whiten.train.qidxs train_whiten.val.qidxs+numel(train_whiten.train.cids)]; % query indexes 
-	pidxs = [train_whiten.train.pidxs train_whiten.val.pidxs+numel(train_whiten.train.cids)]; % positive indexes
+% Prepare function for desc extraction
+if ~use_rvec
+    if ~use_ms
+        descfun = @(x, y) cnn_vecms (x, y, 1);
+    else
+        descfun = @(x, y) cnn_vecms (x, y, [1, 1/sqrt(2), 1/2]);
+    end
 else
-	cids  = train_whiten.cids; 
-	qidxs = train_whiten.qidxs; % query indexes 
-	pidxs = train_whiten.pidxs; % positive indexes
+    if ~use_ms
+        descfun = @(x, y) cnn_vecrms (x, y, 3, 1);
+    else
+        descfun = @(x, y) cnn_vecrms (x, y, 3, [1, 1/sqrt(2), 1/2]);
+    end
 end
 
-% learn whitening
-fprintf('>> whitening: Extracting CNN descriptors for training images...\n');
-vecs_whiten = cell(1, numel(cids));
-if numGpus <= 1
-	progressbar(0);
-	for i=1:numel(cids)
-		vecs_whiten{i} = descfun(imresizemaxd(imread(cid2filename(cids{i}, ims_whiten_dir)), test_imdim, 0), net);
-		progressbar(i/numel(cids));
-	end
+
+% Load training data filenames and pairs for whitening
+if exist (learned_whiten_filepath, 'file')
+    fprintf('>> loading learned whitening from %s\n', learned_whiten_filepath);
+    load (learned_whiten_filepath);
 else
-	time = tic;
-	parfor i=1:numel(cids)
-		if strcmp(net.device, 'cpu'), net.move('gpu'); end
-		vecs_whiten{i} = descfun(imresizemaxd(imread(cid2filename(cids{i}, ims_whiten_dir)), test_imdim, 0), net);
-	end
-	fprintf('>>>> done in %s\n', htime(toc(time)));
+    ims_whiten_dir = fullfile(data_root, 'train', 'ims');
+    train_whiten = load(train_whiten_file);
+    if isfield(train_whiten, 'train') && isfield(train_whiten, 'val')
+        cids  = [train_whiten.train.cids train_whiten.val.cids];
+        qidxs = [train_whiten.train.qidxs train_whiten.val.qidxs+numel(train_whiten.train.cids)]; % query indexes
+        pidxs = [train_whiten.train.pidxs train_whiten.val.pidxs+numel(train_whiten.train.cids)]; % positive indexes
+    else
+        cids  = train_whiten.cids;
+        qidxs = train_whiten.qidxs; % query indexes
+        pidxs = train_whiten.pidxs; % positive indexes
+    end
+
+    % learn whitening
+    fprintf('>> whitening: Extracting CNN descriptors for training images...\n');
+    vecs_whiten = cell(1, numel(cids));
+    if numGpus <= 1
+        progressbar(0);
+        for i=1:numel(cids)
+            vecs_whiten{i} = descfun(imresizemaxd(imread(cid2filename(cids{i}, ims_whiten_dir)), test_imdim, 0), net);
+            progressbar(i/numel(cids));
+        end
+    else
+        time = tic;
+        parfor i=1:numel(cids)
+            if strcmp(net.device, 'cpu'), net.move('gpu'); end
+            vecs_whiten{i} = descfun(imresizemaxd(imread(cid2filename(cids{i}, ims_whiten_dir)), test_imdim, 0), net);
+        end
+        fprintf('>>>> done in %s\n', htime(toc(time)));
+    end
+    vecs_whiten = cell2mat(vecs_whiten);
+    fprintf('>> whitening: Learning...\n');
+    Lw = whitenlearn(vecs_whiten, qidxs, pidxs);
+    save (learned_whiten_filepath, "Lw");
 end
-vecs_whiten = cell2mat(vecs_whiten);
-fprintf('>> whitening: Learning...\n');
-Lw = whitenlearn(vecs_whiten, qidxs, pidxs);
 
 % extract and evaluate
 for d = 1:numel(test_datasets)
