@@ -18,11 +18,13 @@ download_train(data_root);
 download_test(data_root); 
 
 % Set test options
+
 test_datasets = {
   'oxford5k',
   'paris6k',
   'roxford5k',
-  'rparis6k'
+  'rparis6k',
+  'sculptures6k'
 };  % list of datasets to evaluate on
 test_imdim = 1024;  % choose test image dimensionality
 use_ms = 1; % use multi-scale representation, otherwise use single-scale
