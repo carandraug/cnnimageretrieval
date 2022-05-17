@@ -205,4 +205,5 @@ for d = 1:numel(test_datasets)
 		fprintf('>> %s: mAP E: %.2f, M: %.2f, H: %.2f\n', test_datasets{d}, 100*mapE, 100*mapM, 100*mapH);
 		fprintf('>> %s: mP@k[%d %d %d] E: [%.2f %.2f %.2f], M: [%.2f %.2f %.2f], H: [%.2f %.2f %.2f]\n', test_datasets{d}, ks(1), ks(2), ks(3), 100*mprE, 100*mprM, 100*mprH);
 	end
+	save ([test_datasets{d} '-ranking.mat'], 'sim', 'ranks');
 end
