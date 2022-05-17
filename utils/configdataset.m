@@ -21,6 +21,12 @@ switch lower(dataset)
     params.dir_data= [dir_main 'paris6k/'];
     cfg = config_paris (params);
 
+  case 'sculptures6k'
+    params.ext = '.jpg';
+    params.qext = '.jpg';
+    params.dir_data= [dir_main 'sculptures6k/'];
+    cfg = config_sculptures (params);
+
   case 'roxford5k'
     params.ext = '.jpg';
     params.qext = '.jpg';
@@ -72,6 +78,20 @@ function cfg = config_paris (cfg)
   % Specific variables to handle paris's groundtruth
   cfg.imlist = imlist;
   cfg.qimlist = {imlist{qidx}};  
+  cfg.gnd = gnd;
+  cfg.qidx = qidx;
+  cfg.n = length (cfg.imlist);   % number of database images
+  cfg.nq = length (cfg.qidx);    % number of query images
+
+%----------------------------------------------------
+function cfg = config_sculptures (cfg)
+  % Load groundtruth
+%----------------------------------------------------
+  cfg.gnd_fname = [cfg.dir_data 'gnd_sculptures6k.mat'];
+  load (cfg.gnd_fname); % Retrieve list of image names, ground truth and query numbers
+  % Specific variables to handle sculptures's groundtruth
+  cfg.imlist = imlist;
+  cfg.qimlist = {imlist{qidx}};
   cfg.gnd = gnd;
   cfg.qidx = qidx;
   cfg.n = length (cfg.imlist);   % number of database images
